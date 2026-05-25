@@ -1,45 +1,144 @@
-# Maven
-# Build your Java project and run tests with Apache Maven.
-# Add steps that analyze code, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/java
-
 trigger:
 - main
 
+pr:
+- main
+
 pool:
-  vmImage: ubuntu-latest
+  vmImage: 'ubuntu-latest'
 
-steps:
-- task: Maven@4
-  inputs:
-    mavenPomFile: 'pom.xml'
-    goals: 'compile'
-    publishJUnitResults: true
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
-    javaHomeOption: 'JDKVersion'
-    mavenVersionOption: 'Default'
-    mavenAuthenticateFeed: false
-    effectivePomSkip: false
-    sonarQubeRunAnalysis: false
+variables:
+  JAVA_VERSION: '17'
+  MAVEN_OPTS: '-Xmx1024m'
 
-- task: Maven@4
-  inputs:
-    mavenPomFile: 'pom.xml'
-    goals: 'clean'
-    publishJUnitResults: true
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
-    javaHomeOption: 'JDKVersion'
-    mavenVersionOption: 'Default'
-    mavenAuthenticateFeed: false
-    effectivePomSkip: false
-    sonarQubeRunAnalysis: false
-- task: Maven@3
-  inputs:
-    mavenPomFile: 'pom.xml'
-    mavenOptions: '-Xmx3072m'
-    javaHomeOption: 'JDKVersion'
-    jdkVersionOption: '1.11'
-    jdkArchitectureOption: 'x64'
-    publishJUnitResults: true
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
-    goals: 'package'
+stages:
+
+##########################################
+# Stage 1: Build and Test
+##########################################
+
+- stage: Build
+  displayName: 'Build Spring Boot Application'
+
+  jobs:
+
+  - job: BuildJob
+    displayName: 'Build and Test'
+
+    steps:
+
+    ####################################
+    # Install Java
+    ####################################
+
+    - task: JavaToolInstaller@0
+      displayName: 'Install Java 17'
+
+      inputs:
+        versionSpec: '17'
+        jdkArchitectureOption: 'x64'
+        jdkSourceOption: 'PreInstalled'
+
+
+    ####################################
+    # Verify Java
+    ####################################
+
+    - script: |
+        java -version
+        mvn -version
+
+      displayName: 'Verify Java and Maven'
+
+
+    ####################################
+    # Download dependencies
+    ####################################
+
+    - script: |
+        mvn dependency:resolve
+
+      displayName: 'Resolve Maven dependencies'
+
+      condition: succeeded()
+
+
+    ####################################
+    # Run tests
+    ####################################
+
+    - script: |
+        mvn test
+
+      displayName: 'Run Unit Tests'
+
+      condition: succeeded()
+
+
+    ####################################
+    # Build Spring Boot JAR
+    ####################################
+
+    - script: |
+        mvn clean package -DskipTests
+
+      displayName: 'Build Application'
+
+      condition: succeeded()
+
+
+    ####################################
+    # Publish Test Results
+    ####################################
+
+    - task: PublishTestResults@2
+
+      inputs:
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        testRunTitle: 'Spring Boot Tests'
+
+      condition: succeededOrFailed()
+
+
+    ####################################
+    # Publish Artifact
+    ####################################
+
+    - task: PublishBuildArtifacts@1
+
+      inputs:
+        PathtoPublish: 'target'
+        ArtifactName: 'springboot-artifact'
+        publishLocation: 'Container'
+
+      displayName: 'Publish Artifact'
+
+      condition: succeeded()
+
+
+
+##########################################
+# Stage 2: Deploy
+##########################################
+
+- stage: Deploy
+
+  displayName: 'Deploy Stage'
+
+  dependsOn: Build
+
+  condition: succeeded()
+
+  jobs:
+
+  - job: DeployJob
+
+    displayName: 'Deploy Application'
+
+    steps:
+
+    - script: |
+
+        echo "Deploy Spring Boot App"
+
+      displayName: 'Deploy'
