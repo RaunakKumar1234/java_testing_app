@@ -1,14 +1,5 @@
+
 trigger:
-- task: Maven@4
-  inputs:
-    mavenPomFile: 'pom.xml'
-    publishJUnitResults: true
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
-    javaHomeOption: 'JDKVersion'
-    mavenVersionOption: 'Default'
-    mavenAuthenticateFeed: false
-    effectivePomSkip: false
-    sonarQubeRunAnalysis: false
 - main
 
 pr:
@@ -23,9 +14,9 @@ variables:
 
 stages:
 
-##########################################
-# Stage 1: Build and Test
-##########################################
+# ==================================
+# Stage 1 : Build & Test
+# ==================================
 
 - stage: Build
   displayName: 'Build Spring Boot Application'
@@ -37,130 +28,101 @@ stages:
 
     steps:
 
-    ####################################
-    # Install Java
-    ####################################
-
+    # Install Java 17
     - task: JavaToolInstaller@0
       displayName: 'Install Java 17'
-
       inputs:
         versionSpec: '17'
         jdkArchitectureOption: 'x64'
         jdkSourceOption: 'PreInstalled'
 
-
-    ####################################
-    # Verify Java
-    ####################################
-
+    # Verify Java & Maven
     - script: |
         java -version
         mvn -version
-
       displayName: 'Verify Java and Maven'
 
+    # Resolve Maven Dependencies
+    - task: Maven@4
+      displayName: 'Resolve Maven Dependencies'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        goals: 'dependency:resolve'
+        publishJUnitResults: false
+        javaHomeOption: 'JDKVersion'
+        mavenVersionOption: 'Default'
 
-    ####################################
-    # Download dependencies
-    ####################################
-
-    - script: |
-        mvn dependency:resolve
-
-      displayName: 'Resolve Maven dependencies'
-
-      condition: succeeded()
-
-
-    ####################################
-    # Run tests
-    ####################################
-
-    - script: |
-        mvn test
-
+    # Run Tests
+    - task: Maven@4
       displayName: 'Run Unit Tests'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        goals: 'test'
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        javaHomeOption: 'JDKVersion'
+        mavenVersionOption: 'Default'
 
-      condition: succeeded()
+    # Build Application
+    - task: Maven@4
+      displayName: 'Build Spring Boot JAR'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        goals: 'clean package -DskipTests'
+        publishJUnitResults: false
+        javaHomeOption: 'JDKVersion'
+        mavenVersionOption: 'Default'
 
-
-    ####################################
-    # Build Spring Boot JAR
-    ####################################
-
-    - script: |
-        mvn clean package -DskipTests
-
-      displayName: 'Build Application'
-
-      condition: succeeded()
-
-
-    ####################################
     # Publish Test Results
-    ####################################
-
     - task: PublishTestResults@2
-
+      displayName: 'Publish Test Results'
       inputs:
         testResultsFiles: '**/surefire-reports/TEST-*.xml'
-        testRunTitle: 'Spring Boot Tests'
-
+        testRunTitle: 'Spring Boot Test Results'
       condition: succeededOrFailed()
 
-
-    ####################################
     # Publish Artifact
-    ####################################
-
     - task: PublishBuildArtifacts@1
-
+      displayName: 'Publish Build Artifact'
       inputs:
         PathtoPublish: 'target'
         ArtifactName: 'springboot-artifact'
         publishLocation: 'Container'
 
-      displayName: 'Publish Artifact'
 
-      condition: succeeded()
-
-
-
-##########################################
-# Stage 2: Deploy
-##########################################
+# ==================================
+# Stage 2 : Deploy
+# ==================================
 
 - stage: Deploy
-
-  displayName: 'Deploy Stage'
+  displayName: 'Deploy Application'
 
   dependsOn: Build
-
   condition: succeeded()
 
   jobs:
 
   - job: DeployJob
-
-    displayName: 'Deploy Application'
+    displayName: 'Deploy Spring Boot App'
 
     steps:
 
+    # Download Artifact
+    - task: DownloadBuildArtifacts@0
+      displayName: 'Download Artifact'
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'springboot-artifact'
+        downloadPath: '$(System.ArtifactsDirectory)'
+
+    # Verify Artifact
     - script: |
+        echo "Checking downloaded artifact..."
+        ls -R $(System.ArtifactsDirectory)
+      displayName: 'Verify Artifact'
 
-        echo "Deploy Spring Boot App"
-
-      displayName: 'Deploy'
-
-- task: Maven@4
-  inputs:
-    mavenPomFile: 'pom.xml'
-    goals: 'clean'
-    publishJUnitResults: true
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
-    javaHomeOption: 'JDKVersion'
-    mavenVersionOption: 'Default'
-    mavenAuthenticateFeed: false
-    effectivePomSkip: false
-    sonarQubeRunAnalysis: false
+    # Deploy Step
+    - script: |
+        echo "Deploying Spring Boot Application..."
+      displayName: 'Deploy Application'
