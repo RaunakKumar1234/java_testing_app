@@ -1,4 +1,14 @@
 trigger:
+- task: Maven@4
+  inputs:
+    mavenPomFile: 'pom.xml'
+    publishJUnitResults: true
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    javaHomeOption: 'JDKVersion'
+    mavenVersionOption: 'Default'
+    mavenAuthenticateFeed: false
+    effectivePomSkip: false
+    sonarQubeRunAnalysis: false
 - main
 
 pr:
@@ -142,3 +152,15 @@ stages:
         echo "Deploy Spring Boot App"
 
       displayName: 'Deploy'
+
+- task: Maven@4
+  inputs:
+    mavenPomFile: 'pom.xml'
+    goals: 'clean'
+    publishJUnitResults: true
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    javaHomeOption: 'JDKVersion'
+    mavenVersionOption: 'Default'
+    mavenAuthenticateFeed: false
+    effectivePomSkip: false
+    sonarQubeRunAnalysis: false
